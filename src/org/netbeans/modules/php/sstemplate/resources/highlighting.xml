@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fontscolors PUBLIC '-//NetBeans//DTD Editor Fonts and Colors settings 1.1//EN' 'http://www.netbeans.org/dtds/EditorFontsColors-1_1.dtd'>
+<fontscolors>
+
+    <fontcolor name="sstemplate_comment" default="comment" />
+    
+    <fontcolor name="sstemplate_instruction" foreColor="ff966738">
+        <font style="bold" />
+    </fontcolor>
+    
+    <fontcolor name="sstemplate_variable" foreColor="ff966738">
+        <font style="bold" />
+    </fontcolor>
+    
+    <fontcolor name="sstemplate_operator" foreColor="ff00a0a0" default="keyword" />
+    <fontcolor name="sstemplate_name" default="identifier" />
+    <fontcolor name="sstemplate_number" default="number" />
+    <fontcolor name="sstemplate_string" foreColor="ffb4b427" default="string" />
+    <fontcolor name="sstemplate_function" foreColor="ff00a0a0" default="keyword" />
+    <fontcolor name="sstemplate_punctuation" foreColor="ff00a0a0" default="keyword" />
+    
+    <fontcolor name="sstemplate_other" default="error" />
+    
+</fontscolors>
