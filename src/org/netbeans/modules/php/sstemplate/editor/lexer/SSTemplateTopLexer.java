@@ -7,7 +7,6 @@
  */
 package org.netbeans.modules.php.sstemplate.editor.lexer;
 
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.netbeans.api.lexer.Token;
 import org.netbeans.lib.editor.util.CharSequenceUtilities;
@@ -24,12 +23,15 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
     protected final LexerInput input;
 
     static String OPEN_INSTRUCTION = "<%";
-    static String OPEN_VARIABLE = "${";
+    static String OPEN_ESCAPED_VARIABLE = "{$";
     static String OPEN_COMMENT = "<%--";
 
     static String CLOSE_INSTRUCTION = "%>";
-    static String CLOSE_VARIABLE = "}";
+    static String CLOSE_ESCAPED_VARIABLE = "}";
     static String CLOSE_COMMENT = "--%>";
+
+    static String OPEN_VARIABLE = "$";
+    static Pattern VALID_VARIABLE = Pattern.compile("\\$[A-Za-z0-9\\(\\)\\.]+$");
 
     private SSTemplateTopLexer(LexerRestartInfo<SSTemplateTopTokenId> info) {
 
@@ -62,7 +64,7 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
     SSTemplateTopLexerState.Type findTag(CharSequence text, boolean open) {
         SSTemplateTopLexerState.Type result = SSTemplateTopLexerState.Type.NONE;
         //Comments
-        if (open && CharSequenceUtilities.endsWith(text, OPEN_COMMENT)) {
+        if ((!open || state.type != SSTemplateTopLexerState.Type.INSTRUCTION) && CharSequenceUtilities.endsWith(text, OPEN_COMMENT)) {
             result = SSTemplateTopLexerState.Type.COMMENT;
         } else if (!open && CharSequenceUtilities.endsWith(text, CLOSE_COMMENT)) {
             result = SSTemplateTopLexerState.Type.COMMENT;
@@ -72,11 +74,16 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
         } else if (!open && CharSequenceUtilities.endsWith(text, CLOSE_INSTRUCTION)) {
             result = SSTemplateTopLexerState.Type.INSTRUCTION;
             //Variables
-        } else if (open && CharSequenceUtilities.endsWith(text, OPEN_VARIABLE)) {
+        } else if (open && (CharSequenceUtilities.endsWith(text, OPEN_ESCAPED_VARIABLE))) {
+            result = SSTemplateTopLexerState.Type.ESCAPED_VARIABLE;
+        } else if (!open && CharSequenceUtilities.endsWith(text, CLOSE_ESCAPED_VARIABLE)) {
+            result = SSTemplateTopLexerState.Type.ESCAPED_VARIABLE;
+        } else if ((!open || state.type != SSTemplateTopLexerState.Type.ESCAPED_VARIABLE) && CharSequenceUtilities.endsWith(text, OPEN_VARIABLE)) {
             result = SSTemplateTopLexerState.Type.VARIABLE;
-        } else if (!open && CharSequenceUtilities.endsWith(text, CLOSE_VARIABLE)) {
+        } else if ((!open && (state.type == SSTemplateTopLexerState.Type.NONE|| state.type == SSTemplateTopLexerState.Type.VARIABLE)) && (!VALID_VARIABLE.matcher(text).find())) {
             result = SSTemplateTopLexerState.Type.VARIABLE;
         }
+
         // Since a comment(<%--) and an inscruction (<%) start the same, We need
         // to double check the instruction is not actually a comment by peeking
         // at the next two characters
@@ -101,9 +108,10 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
         }
 
         while (c != LexerInput.EOF) {
-
             CharSequence text = input.readText();
-
+            SSTemplateTopLexerState.Main main = state.main;
+            SSTemplateTopLexerState.Type type = state.type;
+            Debugger.oneLine("parse '" + text + "', state.main='" + main + "', state.type='" + type + "'");
             switch (state.main) {
 
                 case INIT:
@@ -113,7 +121,11 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
                     if (result != SSTemplateTopLexerState.Type.NONE) {
                         state.main = SSTemplateTopLexerState.Main.OPEN;
                         state.type = result;
-                        if (input.readLength() > 2) {
+                        int textLength = input.readLength();
+                        if (state.type == SSTemplateTopLexerState.Type.VARIABLE && textLength > 1) {
+                            input.backup(1);
+                            return SSTemplateTopTokenId.T_HTML;
+                        } else if (textLength > 2) {
                             input.backup(2);
                             return SSTemplateTopTokenId.T_HTML;
                         }
@@ -121,21 +133,21 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
                         break;
                     }
                 case OPEN:
-                    if (input.readLength() == 2) {
+                    if (input.readLength() == 2 || state.type == SSTemplateTopLexerState.Type.VARIABLE || state.type == SSTemplateTopLexerState.Type.ESCAPED_VARIABLE) {
                         state.main = SSTemplateTopLexerState.Main.SSTEMPLATE;
                     }
                     break;
                 case SSTEMPLATE:
                     result = findTag(text, false);
+                    if (result == SSTemplateTopLexerState.Type.COMMENT && state.type == SSTemplateTopLexerState.Type.INSTRUCTION) {
+                        state.type = result;
+                        break;
+                    }
                     Debugger.oneLine("text='" + text + "', state.main='" + state.main + "', result='" + result + "'");
-                    if (result != SSTemplateTopLexerState.Type.NONE) {
-                        if (result == SSTemplateTopLexerState.Type.COMMENT && state.type == SSTemplateTopLexerState.Type.INSTRUCTION) {
-                            state.main = SSTemplateTopLexerState.Main.CLOSE;
-                            if (input.readLength() > 2) {
-                                input.backup(2);
-                            }
 
-                        } else if (result == state.type) {
+                    if (result != SSTemplateTopLexerState.Type.NONE) {
+
+                        if (result == state.type) {
 
                             boolean escape = false;
                             boolean doubleQuotes = false;
@@ -163,24 +175,38 @@ public class SSTemplateTopLexer implements Lexer<SSTemplateTopTokenId> {
                             if (singleQuotes || doubleQuotes) {
                                 break;
                             }
-
-                            if (result == SSTemplateTopLexerState.Type.COMMENT) {
+                            if (result == SSTemplateTopLexerState.Type.VARIABLE && !VALID_VARIABLE.matcher(text).find()) {
                                 state.main = SSTemplateTopLexerState.Main.CLOSE;
+                                if (input.readLength() > 1) {
+                                    input.backup(1);
+                                }
                             } else {
-                                state.main = SSTemplateTopLexerState.Main.CLOSE;
+                                if (result == SSTemplateTopLexerState.Type.COMMENT) {
+                                    state.main = SSTemplateTopLexerState.Main.CLOSE;
+                                } else {
+                                    state.main = SSTemplateTopLexerState.Main.CLOSE;
+                                }
                             }
-
-                            if (input.readLength() > 2) {
+                            int textLength = input.readLength();
+                            if ((state.type == SSTemplateTopLexerState.Type.ESCAPED_VARIABLE || result == SSTemplateTopLexerState.Type.VARIABLE) && textLength > 1) {
+                                input.backup(1);
+                            } else if (textLength > 2) {
                                 input.backup(2);
                             }
+
                         }
                         break;
                     }
                     break;
                 case CLOSE:
-                    if ((state.type == SSTemplateTopLexerState.Type.INSTRUCTION && CharSequenceUtilities.endsWith(text, CLOSE_INSTRUCTION))
-                            || (state.type == SSTemplateTopLexerState.Type.VARIABLE && CharSequenceUtilities.endsWith(text, CLOSE_VARIABLE))
-                            || ((state.type == SSTemplateTopLexerState.Type.COMMENT || state.type == SSTemplateTopLexerState.Type.INSTRUCTION) && CharSequenceUtilities.endsWith(text, CLOSE_COMMENT))) {
+                    if ( // Closing instructions
+                            (state.type == SSTemplateTopLexerState.Type.INSTRUCTION && CharSequenceUtilities.endsWith(text, CLOSE_INSTRUCTION))
+                            || // Closing escape variables
+                            (state.type == SSTemplateTopLexerState.Type.ESCAPED_VARIABLE && CharSequenceUtilities.endsWith(text, CLOSE_ESCAPED_VARIABLE))
+                            || // Closing  variables
+                            (state.type == SSTemplateTopLexerState.Type.VARIABLE && VALID_VARIABLE.matcher(text).find())
+                            || // Closing comments
+                            ((state.type == SSTemplateTopLexerState.Type.COMMENT || state.type == SSTemplateTopLexerState.Type.INSTRUCTION) && CharSequenceUtilities.endsWith(text, CLOSE_COMMENT))) {
                         state.main = SSTemplateTopLexerState.Main.HTML;
                         return SSTemplateTopTokenId.T_SSTEMPLATE;
                     }

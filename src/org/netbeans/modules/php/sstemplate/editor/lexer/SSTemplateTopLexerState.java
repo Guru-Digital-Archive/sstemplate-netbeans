@@ -20,7 +20,7 @@ public class SSTemplateTopLexerState {
 
     public enum Type {
 
-        NONE, INSTRUCTION, VARIABLE, COMMENT
+        NONE, INSTRUCTION, ESCAPED_VARIABLE, VARIABLE, COMMENT
     };
 
     Main main;

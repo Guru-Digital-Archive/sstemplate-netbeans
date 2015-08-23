@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 import org.netbeans.api.lexer.Token;
 import org.netbeans.lib.editor.util.CharSequenceUtilities;
 import org.netbeans.modules.php.sstemplate.Debugger;
+import static org.netbeans.modules.php.sstemplate.editor.lexer.SSTemplateTopLexer.VALID_VARIABLE;
 import org.netbeans.spi.lexer.Lexer;
 import org.netbeans.spi.lexer.LexerInput;
 import org.netbeans.spi.lexer.LexerRestartInfo;
@@ -60,11 +61,14 @@ public class SSTemplateLexer implements Lexer<SSTemplateTokenId> {
 
     static protected String INSTRUCTION_START = "<%";
     static protected String COMMENT_START = "--";
-    static protected String VARIABLE_START = "${";
+    static protected String VARIABLE_ESCAPED_START = "{$";
 
     static protected String INSTRUCTION_END = "<%";
     static protected String COMMENT_END = "--%>";
-    static protected String VARIABLE_END = "${";
+    static protected String VARIABLE_ESCAPED_END = "{$";
+
+    static String OPEN_VARIABLE = "$";
+    static Pattern VALID_VARIABLE = Pattern.compile("[A-Za-z0-9\\(\\)\\.]$");
 
     static protected String PUNCTUATION = "|()[]{}?:.,";
 
@@ -188,11 +192,14 @@ public class SSTemplateLexer implements Lexer<SSTemplateTokenId> {
 
                         }
                         return result;
-                    } else if (CharSequenceUtilities.startsWith(text, VARIABLE_START)) {
+                    } else if (CharSequenceUtilities.startsWith(text, VARIABLE_ESCAPED_START)) {
                         state.main = SSTemplateLexerState.Main.VARIABLE;
                         state.sub = SSTemplateLexerState.Sub.INIT;
                         Debugger.oneLine("state.main='" + state.main + "', state.sub='" + state.sub + "' return " + SSTemplateTokenId.T_SSTEMPLATE_VARIABLE);
                         return SSTemplateTokenId.T_SSTEMPLATE_VARIABLE;
+                    } else if (VALID_VARIABLE.matcher(text).find()) {
+                        state.main = SSTemplateLexerState.Main.VARIABLE;
+                        state.sub = SSTemplateLexerState.Sub.INIT;
                     }
                     break;
 
@@ -201,13 +208,14 @@ public class SSTemplateLexer implements Lexer<SSTemplateTokenId> {
                     break;
 
                 case VARIABLE:
+
                 case INSTRUCTION:
                     /* End markups */
                     if (state.main == SSTemplateLexerState.Main.VARIABLE) {
                         if (c == '}' || Character.isDigit(c) || Character.isAlphabetic(c)) {
                             Debugger.oneLine("text='" + text + "', state.main='" + state.main + "' return " + SSTemplateTokenId.T_SSTEMPLATE_VARIABLE);
                             return SSTemplateTokenId.T_SSTEMPLATE_VARIABLE;
-                        } else if (c == '.') {
+                        } else if (c == '.' || c == '(' || c == ')') {
                             return SSTemplateTokenId.T_SSTEMPLATE_PUNCTUATION;
                         } else {
                             return SSTemplateTokenId.T_SSTEMPLATE_OTHER;
