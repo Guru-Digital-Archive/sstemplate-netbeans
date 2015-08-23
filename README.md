@@ -33,3 +33,8 @@ Installing from source
 5. Install the NBM file as described in "Installing from package".
 
 For more information refer yourself to: http://platform.netbeans.org/tutorials/nbm-google.html
+
+Screenshot
+----------------------
+![SilverStripe Templates for NetBeans](http://guru-digital.github.io/sstemplate-netbeans/images/screenshot.png)
+
